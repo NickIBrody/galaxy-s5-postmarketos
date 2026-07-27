@@ -178,7 +178,13 @@ async def main():
     else:
         print("напрямую, без прокси")
 
-    client = TelegramClient(SESSION, int(cfg["api_id"]), cfg["api_hash"], **kwargs)
+    # без таймаута клиент молча висит вечно, если прокси не отвечает
+    client = TelegramClient(
+        SESSION, int(cfg["api_id"]), cfg["api_hash"],
+        timeout=15, connection_retries=2, retry_delay=1, request_retries=2,
+        **kwargs
+    )
+    print("подключаюсь...", flush=True)
     state = Chat()
 
     @client.on(events.NewMessage(incoming=True))
