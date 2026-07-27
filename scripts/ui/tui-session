@@ -1,0 +1,50 @@
+#!/bin/sh
+# Сессия TUI-режима: терминал на весь экран (кроме мёртвой зоны снизу)
+# + плавающая экранная клавиатура.
+# Ставится как /usr/local/bin/tui-session, запускается lightdm'ом (autologin-session=tui).
+export DISPLAY=:0
+
+# Сколько пикселей снизу не использовать (мёртвая зона тачскрина).
+# 1 см на экране S5 ≈ 170 px. Меняется в /etc/deadzone.conf строкой DEAD=200
+DEAD=200
+[ -f /etc/deadzone.conf ] && . /etc/deadzone.conf
+
+SW=1080
+SH=1920
+
+openbox &
+
+# Прячем курсор мыши
+printf '#define b_width 1\n#define b_height 1\nstatic char b_bits[] = {0x00};\n' > /tmp/blank.xbm
+( sleep 1; xsetroot -cursor /tmp/blank.xbm /tmp/blank.xbm 2>/dev/null ) &
+
+# Клавиатура. КОСТЫЛЬ: onboard иногда падает молча, если стартует раньше,
+# чем готовы X/dbus. Поэтому цикл перезапуска с логом.
+(
+  sleep 2
+  while true; do
+    onboard >>/tmp/onboard.log 2>&1
+    echo "--- onboard упал ($(date)), перезапуск через 3с ---" >> /tmp/onboard.log
+    sleep 3
+  done
+) &
+
+# Окно терминала подгоняем по пикселям, чтобы низ экрана остался свободным.
+# Это надёжнее, чем xrandr --transform: без масштабирования и замыливания.
+(
+  sleep 3
+  H=$((SH - DEAD))
+  for i in 1 2 3 4 5; do
+    W=$(xdotool search --class -i xterm 2>/dev/null | head -1)
+    if [ -n "$W" ]; then
+      xdotool windowsize "$W" "$SW" "$H"
+      xdotool windowmove "$W" 0 0
+      break
+    fi
+    sleep 1
+  done
+) &
+
+exec xterm -fa "Monospace" -fs 14 -bg black -fg white \
+  -xrm 'XTerm*scrollBar: false' \
+  -e /bin/sh -lc 'echo "== postmarketOS S5 =="; echo "call | hangup | answer | sms | smscheck | contact | mobiledata on|off"; echo; exec /bin/sh -l'
