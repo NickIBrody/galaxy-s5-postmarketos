@@ -70,13 +70,18 @@ def load_conf():
 
 
 def get_proxy(cfg):
+    """Возвращает (вид, параметры). Вид: 'mtproto', 'socks5' или None."""
     if os.environ.get("TG_NOPROXY"):
-        return None
-    raw = cfg.get("proxy")
+        return None, None
+    raw = os.environ.get("TG_PROXY") or cfg.get("proxy")
     if not raw:
-        return DEFAULT_PROXY
+        return "mtproto", DEFAULT_PROXY
+    parts = raw.split(":")
+    if parts[0] in ("socks5", "socks4", "http"):
+        # socks5:127.0.0.1:1080  — например, туннель от  ssh -N -D 1080 сервер
+        return "socks5", (parts[0], parts[1], int(parts[2]))
     host, port, secret = raw.split(":", 2)
-    return (host, int(port), secret)
+    return "mtproto", (host, int(port), secret)
 
 
 class Chat:
@@ -170,11 +175,14 @@ async def repl(client, state):
 
 async def main():
     cfg = load_conf()
-    proxy = get_proxy(cfg)
+    kind, proxy = get_proxy(cfg)
     kwargs = {}
-    if proxy:
+    if kind == "mtproto":
         kwargs = dict(connection=ConnectionTcpMTProxyRandomizedIntermediate, proxy=proxy)
-        print(f"через прокси {proxy[0]}:{proxy[1]}")
+        print(f"через MTProto-прокси {proxy[0]}:{proxy[1]}")
+    elif kind == "socks5":
+        kwargs = dict(proxy=proxy)
+        print(f"через {proxy[0]} {proxy[1]}:{proxy[2]}")
     else:
         print("напрямую, без прокси")
 
